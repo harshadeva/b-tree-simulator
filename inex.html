@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>B-Tree Visualization</title>
+<style>
+  .btree {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-top: 20px;
+    position: relative;
+  }
+  .level {
+    display: flex;
+    justify-content: center;
+    margin: 20px 0;
+    position: relative;
+  }
+  .node {
+    display: inline-block;
+    padding: 10px 20px;
+    margin: 0 10px;
+    border: 2px solid #333;
+    border-radius: 10px;
+    box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.1);
+    background-color: #f9f9f9;
+    position: relative;
+  }
+  .key {
+    display: inline-block;
+    margin: 0 5px;
+    padding: 5px 10px;
+    background-color: #4CAF50;
+    border-radius: 5px;
+    color: white;
+    font-weight: bold;
+  }
+  .controls {
+    margin: 20px;
+  }
+  .controls input {
+    margin: 5px;
+  }
+  .controls button {
+    margin: 5px;
+    padding: 5px 10px;
+    border: none;
+    border-radius: 5px;
+    background-color: #4CAF50;
+    color: white;
+    cursor: pointer;
+  }
+  .controls button:hover {
+    background-color: #45a049;
+  }
+  svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+  line {
+    stroke: #333;
+    stroke-width: 2px;
+  }
+</style>
+</head>
+<body>
+
+<div class="controls">
+  <label for="maxKeys">Maximum Keys Per Node:</label>
+  <input type="number" id="maxKeys" min="3" value="3">
+  <button onclick="initializeBTree()">Initialize B-Tree</button>
+  <br>
+  <label for="key">Insert Key:</label>
+  <input type="number" id="key">
+  <button onclick="insertKey()">Insert</button>
+</div>
+
+<div id="btreeContainer" class="btree"></div>
+<svg id="svgContainer"></svg>
+
+<script>
+class Node {
+  constructor(maxKeys, leaf = true) {
+    this.maxKeys = maxKeys;
+    this.keys = [];
+    this.children = [];
+    this.leaf = leaf;
+  }
+}
+
+class BTree {
+  constructor(maxKeys) {
+    this.root = new Node(maxKeys);
+    this.maxKeys = maxKeys;
+    this.minDegree = Math.ceil((maxKeys + 1) / 2);
+  }
+
+  traverse() {
+    this._traverse(this.root);
+  }
+
+  _traverse(node) {
+    let i;
+    for (i = 0; i < node.keys.length; i++) {
+      if (!node.leaf) {
+        this._traverse(node.children[i]);
+      }
+      console.log(node.keys[i]);
+    }
+    if (!node.leaf) {
+      this._traverse(node.children[i]);
+    }
+  }
+
+  insert(key) {
+    let root = this.root;
+    if (root.keys.length === this.maxKeys) {
+      let newNode = new Node(this.maxKeys, false);
+      newNode.children.push(this.root);
+      this._splitChild(newNode, 0, this.root);
+      this.root = newNode;
+      this._insertNonFull(newNode, key);
+    } else {
+      this._insertNonFull(root, key);
+    }
+  }
+
+  _insertNonFull(node, key) {
+    let i = node.keys.length - 1;
+    if (node.leaf) {
+      node.keys.push(0);
+      while (i >= 0 && key < node.keys[i]) {
+        node.keys[i + 1] = node.keys[i];
+        i--;
+      }
+      node.keys[i + 1] = key;
+    } else {
+      while (i >= 0 && key < node.keys[i]) {
+        i--;
+      }
+      i++;
+      if (node.children[i].keys.length === this.maxKeys) {
+        this._splitChild(node, i, node.children[i]);
+        if (key > node.keys[i]) {
+          i++;
+        }
+      }
+      this._insertNonFull(node.children[i], key);
+    }
+  }
+
+  _splitChild(parent, index, child) {
+    let newNode = new Node(child.maxKeys, child.leaf);
+    let minDegree = this.minDegree;
+
+    newNode.keys = child.keys.splice(minDegree, minDegree - 1);
+    parent.keys.splice(index, 0, child.keys.pop());
+
+    if (!child.leaf) {
+      newNode.children = child.children.splice(minDegree, minDegree);
+    }
+
+    parent.children.splice(index + 1, 0, newNode);
+  }
+}
+
+let btree = null;
+
+function createBTreeElement(node, level, parentIndex = null) {
+  const nodeElement = document.createElement('div');
+  nodeElement.className = 'node';
+
+  node.keys.forEach(key => {
+    const keyElement = document.createElement('span');
+    keyElement.className = 'key';
+    keyElement.textContent = key;
+    nodeElement.appendChild(keyElement);
+  });
+
+  const levelElement = document.getElementById('level-' + level);
+  if (!levelElement) {
+    const newLevelElement = document.createElement('div');
+    newLevelElement.className = 'level';
+    newLevelElement.id = 'level-' + level;
+    newLevelElement.appendChild(nodeElement);
+    document.getElementById('btreeContainer').appendChild(newLevelElement);
+  } else {
+    levelElement.appendChild(nodeElement);
+  }
+
+  const index = levelElement ? levelElement.childNodes.length - 1 : 0;
+  if (parentIndex !== null) {
+    nodeElement.dataset.parentIndex = parentIndex;
+  }
+  nodeElement.dataset.level = level;
+  nodeElement.dataset.index = index;
+
+  if (!node.leaf) {
+    node.children.forEach((child, i) => {
+      createBTreeElement(child, level + 1, index);
+    });
+  }
+
+  return nodeElement;
+}
+
+function drawBTree() {
+  const container = document.getElementById('btreeContainer');
+  container.innerHTML = ''; // Clear previous content
+  if (btree && btree.root) {
+    createBTreeElement(btree.root, 0);
+    drawLines();
+  }
+}
+
+function drawLines() {
+  const svgContainer = document.getElementById('svgContainer');
+  svgContainer.innerHTML = ''; // Clear previous SVG content
+
+  const levels = document.getElementsByClassName('level');
+  for (let levelIndex = 0; levelIndex < levels.length - 1; levelIndex++) {
+    const currentLevel = levels[levelIndex];
+    const nextLevel = levels[levelIndex + 1];
+
+    const parentNodes = currentLevel.getElementsByClassName('node');
+    const childNodes = nextLevel.getElementsByClassName('node');
+
+    for (let childNode of childNodes) {
+      const parentIndex = childNode.dataset.parentIndex;
+      const parentNode = parentNodes[parentIndex];
+
+      const parentRect = parentNode.getBoundingClientRect();
+      const childRect = childNode.getBoundingClientRect();
+
+      const parentX = parentRect.left + parentRect.width / 2;
+      const parentY = parentRect.bottom;
+      const childX = childRect.left + childRect.width / 2;
+      const childY = childRect.top;
+
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line.setAttribute('x1', parentX);
+      line.setAttribute('y1', parentY);
+      line.setAttribute('x2', childX);
+      line.setAttribute('y2', childY);
+
+      svgContainer.appendChild(line);
+    }
+  }
+}
+
+function initializeBTree() {
+  const maxKeys = parseInt(document.getElementById('maxKeys').value, 10);
+  if (maxKeys >= 3) {
+    btree = new BTree(maxKeys);
+    drawBTree();
+  } else {
+    alert('Maximum keys per node must be 3 or higher.');
+  }
+}
+
+function insertKey() {
+  const key = parseInt(document.getElementById('key').value, 10);
+  if (btree && !isNaN(key)) {
+    btree.insert(key);
+    drawBTree();
+    setRandomKey(); // Set a new random key after insertion
+  } else {
+    alert('Please initialize the B-Tree and enter a valid key.');
+  }
+}
+
+function setRandomKey() {
+  const randomKey = Math.floor(Math.random() * 200) + 1;
+  document.getElementById('key').value = randomKey;
+}
+
+// Initialize the B-Tree when the page loads and set the first random key
+window.onload = function() {
+  initializeBTree();
+  setRandomKey();
+};
+
+</script>
+
+</body>
+</html>
